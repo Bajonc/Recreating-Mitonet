@@ -4,7 +4,8 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the swav directory of this source tree.
 #
-
+# Sample script for pretraining for 200 epochs with batch size 1280 on 2 nodes with 4 gpus each, more sample scripts can be found here: https://github.com/facebookresearch/swav/tree/main/scripts
+# This header may have to be removed for the script to work
 
 #!/bin/bash
 #SBATCH --partition=YOUR_PARTITION 
