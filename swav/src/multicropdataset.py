@@ -11,10 +11,6 @@ Changes made:
 - Adapted to grayscale images instead of RGB 
 - Norms changed from default to calculated from the CEM1.5M dataset 
 - Transforms changed to match the MitoNet paper
-
-
-
-
 '''
 
 import random
