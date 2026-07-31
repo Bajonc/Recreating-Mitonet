@@ -9,7 +9,7 @@ Most of the code has been taken from the following repositories:
 I have either fixed bugs or adapted the code to fit the specific task at hand
 
 ### Pretraining
-MitoNet uses SwAV to pretrain on 1.5M unlabeled electron microscopy mitochondria images, the code from this part required minor changes
+MitoNet uses SwaV to pretrain on 1.5M unlabeled electron microscopy mitochondria images, the code from this part required minor changes
 
 ### Training
 Done on labeled electron microscopy mitochondria images, the code from this part required major changes
