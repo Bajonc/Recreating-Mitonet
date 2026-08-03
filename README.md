@@ -19,3 +19,5 @@ Done on labeled electron microscopy mitochondria images, the code from this part
 - put the path to your pretrained weights into the config file
 - fill in the training script and config file
 - run the training script
+
+I recommend using some sort of environment manager as the version and package requirements can differ wildly between training and pretraining 
