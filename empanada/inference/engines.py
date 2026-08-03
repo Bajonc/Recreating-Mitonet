@@ -1,3 +1,10 @@
+'''
+Changes:
+- Added filtering of instances smaller than a configured area with the thing_area parameter
+'''
+
+
+
 import math
 import torch
 import torch.nn.functional as F
@@ -96,6 +103,7 @@ class PanopticDeepLabEngine(_Engine):
         thing_list,
         label_divisor=1000,
         stuff_area=64,
+        thing_area=0,
         void_label=0,
         nms_threshold=0.1,
         nms_kernel=7,
@@ -106,6 +114,7 @@ class PanopticDeepLabEngine(_Engine):
         self.thing_list = thing_list
         self.label_divisor = label_divisor
         self.stuff_area = stuff_area
+        self.thing_area = thing_area
         self.void_label = void_label
         self.nms_threshold = nms_threshold
         self.nms_kernel = nms_kernel
@@ -134,6 +143,7 @@ class PanopticDeepLabEngine(_Engine):
         pan_seg, _ = get_panoptic_segmentation(
             sem, ctr_hmp, offsets, self.thing_list,
             self.label_divisor, self.stuff_area,
+            self.thing_area,
             self.void_label, self.nms_threshold, self.nms_kernel
         )
         return pan_seg
@@ -165,6 +175,7 @@ class PanopticDeepLabEngine3d(_MedianQueue, PanopticDeepLabEngine):
         thing_list,
         label_divisor=1000,
         stuff_area=64,
+        thing_area=0,
         void_label=0,
         nms_threshold=0.1,
         nms_kernel=7,
@@ -175,6 +186,7 @@ class PanopticDeepLabEngine3d(_MedianQueue, PanopticDeepLabEngine):
         super().__init__(
             model=model, thing_list=thing_list, label_divisor=label_divisor,
             stuff_area=stuff_area, void_label=void_label,
+            thing_area=thing_area,
             nms_threshold=nms_threshold, nms_kernel=nms_kernel,
             confidence_thr=confidence_thr, median_kernel_size=median_kernel_size,
             **kwargs
@@ -227,6 +239,7 @@ class PanopticDeepLabRenderEngine(PanopticDeepLabEngine):
         thing_list,
         label_divisor=1000,
         stuff_area=64,
+        thing_area=0,
         void_label=0,
         nms_threshold=0.1,
         nms_kernel=7,
@@ -237,7 +250,7 @@ class PanopticDeepLabRenderEngine(PanopticDeepLabEngine):
     ):
         super().__init__(
             model=model, thing_list=thing_list,
-            label_divisor=label_divisor, stuff_area=stuff_area, void_label=void_label,
+            label_divisor=label_divisor, stuff_area=stuff_area, thing_area = thing_area, void_label=void_label,
             nms_threshold=nms_threshold, nms_kernel=nms_kernel,
             confidence_thr=confidence_thr
         )
@@ -286,6 +299,7 @@ class PanopticDeepLabRenderEngine(PanopticDeepLabEngine):
 
         pan_seg = merge_semantic_and_instance(
             sem, instance_seg, self.label_divisor, self.thing_list,
+            self.thing_area,
             self.stuff_area, self.void_label
         )
 
@@ -331,6 +345,7 @@ class PanopticDeepLabRenderEngine3d(_MedianQueue, PanopticDeepLabRenderEngine):
         thing_list,
         label_divisor=1000,
         stuff_area=64,
+        thing_area=0,
         void_label=0,
         nms_threshold=0.1,
         nms_kernel=7,
@@ -343,6 +358,7 @@ class PanopticDeepLabRenderEngine3d(_MedianQueue, PanopticDeepLabRenderEngine):
         super().__init__(
             model=model, thing_list=thing_list,
             label_divisor=label_divisor, stuff_area=stuff_area, void_label=void_label,
+            thing_area = thing_area,
             nms_threshold=nms_threshold, nms_kernel=nms_kernel,
             confidence_thr=confidence_thr, median_kernel_size=median_kernel_size,
             padding_factor=padding_factor, coarse_boundaries=coarse_boundaries
