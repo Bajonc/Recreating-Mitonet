@@ -1,5 +1,5 @@
 # Parameters based on the paper, if the parameter value wasn't mentioned in the paper it was based on empanada's custom_training_pdl.yaml file
-model_name: "MitoNet-NS-NF"
+model_name: "YOUR_MODEL_NAME"
 
 
 TRAIN:
@@ -29,16 +29,16 @@ TRAIN:
     - { aug: "HorizontalFlip" }
     - { aug: "VerticalFlip" }
 
-  train_dir: /projects/ag-bozek/bzajac/b/dataset_80_20/train
-  model_dir: /projects/ag-bozek/bzajac/mitonet_newswav_NF
+  train_dir: YOUR_TRAINING_DATA_DIR
+  model_dir: YOUR_MODEL_DIR
   save_freq: 20
 
   # pretraining parameters
-  encoder_pretraining_path: /projects/ag-bozek/bzajac/new_norm_swav/checkpoint.pth.tar
+  encoder_pretraining_path: YOUR_PRETRAINING_WEIGHTS_PATH
   finetune_layer: 'all'
 
 EVAL:
-  eval_dir: /projects/ag-bozek/bzajac/b/dataset_80_20/val
+  eval_dir: YOUR_EVAL_DIR
   epochs_per_eval: 10
 
   # parameters needed for eval_metrics
