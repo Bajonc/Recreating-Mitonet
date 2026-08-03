@@ -1,0 +1,60 @@
+# Parameters based on the paper, if the parameter value wasn't mentioned in the paper it was based on empanada's custom_training_pdl.yaml file
+model_name: "MitoNet-NS-NF"
+
+
+TRAIN:
+  # set the lr schedule
+  lr_schedule: "OneCycleLR"
+  schedule_params:
+    max_lr: 0.003
+    epochs: 120
+    steps_per_epoch: -1
+    pct_start: 0.3
+
+  # performance metrics
+  print_freq: 50
+  metrics:
+      - { metric: "IoU", name: "semantic_iou", labels: [1], output_key: "sem_logits",  target_key: "sem"}
+
+  # data loading parameters
+  batch_size: 256
+  workers: 4  
+
+  augmentations:
+    - { aug: "RandomScale", scale_limit: [ -0.9, 1 ]}
+    - { aug: "PadIfNeeded", min_width: 256, min_height: 256, border_mode: 0, value: 0}
+    - { aug: "RandomCrop", height: 256, width: 256}
+    - { aug: "Rotate", limit: 180, border_mode: 0, value: 0 }
+    - { aug: "RandomBrightnessContrast", brightness_limit: 0.3, contrast_limit: 0.3 }
+    - { aug: "HorizontalFlip" }
+    - { aug: "VerticalFlip" }
+
+  train_dir: /projects/ag-bozek/bzajac/b/dataset_80_20/train
+  model_dir: /projects/ag-bozek/bzajac/mitonet_newswav_NF
+  save_freq: 20
+
+  # pretraining parameters
+  encoder_pretraining_path: /projects/ag-bozek/bzajac/new_norm_swav/checkpoint.pth.tar
+  finetune_layer: 'all'
+
+EVAL:
+  eval_dir: /projects/ag-bozek/bzajac/b/dataset_80_20/val
+  epochs_per_eval: 10
+
+  # parameters needed for eval_metrics
+  metrics:
+      - { metric: "IoU", name: "semantic_iou", labels: [1], output_key: "sem_logits",  target_key: "sem"}
+      - { metric: "PQ", name: "pq", labels: [1], label_divisor: 1000, output_key: "pan_seg",  target_key: "pan_seg"}
+      - { metric: "F1", name: "f1_75", labels: [1], label_divisor: 1000, iou_thr: 0.75, output_key: "pan_seg",  target_key: "pan_seg"}
+
+  # parameters needed for inference
+  engine: "PanopticDeepLabEngine"
+  engine_params:
+    thing_list: [ 1 ]
+    label_divisor: 1000
+    stuff_area: 64
+    thing_area: 0
+    void_label: 0
+    nms_threshold: 0.1
+    nms_kernel: 7
+    confidence_thr: 0.5
