@@ -6,7 +6,7 @@ Most of the code has been taken from the following repositories:
 - https://github.com/volume-em/empanada-napari
 - https://github.com/facebookresearch/swav
 
-I have either fixed bugs or adapted the code to fit the specific task at hand
+I contributed by fixing bugs and adapting the code to match the specific task at hand 
 
 ### Pretraining
 MitoNet uses SwaV to pretrain on 1.5M unlabeled electron microscopy mitochondria images, the code from this part required minor changes
