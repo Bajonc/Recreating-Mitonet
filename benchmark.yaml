@@ -1,0 +1,25 @@
+MODELS:
+  - "YOUR_MODEL_PATH1"
+  - "YOUR_MODEL_PATH2"
+# etc.
+ORIGINAL_MODEL: "ORIGINAL_MODEL_PATH"
+
+EVAL:
+  eval_dir: "YOUR_EVAL_DIR"
+  batch_size: 1
+  workers: 4
+  print_freq: 50
+
+  metrics:
+    - { metric: "IoU", name: "semantic_iou", labels: [1], output_key: "sem_logits", target_key: "sem" }
+    - { metric: "F1", name: "f1_75", labels: [1], label_divisor: 1000, iou_thr: 0.75, output_key: "pan_seg", target_key: "pan_seg" }
+
+  engine_params:
+    thing_list: [ 1 ]
+    label_divisor: 1000
+    stuff_area: 64
+    thing_area: 150
+    void_label: 0
+    nms_threshold: 0.1
+    nms_kernel: 7
+    confidence_thr: 0.5
