@@ -74,8 +74,15 @@ def main_worker(config):
     )
 
     # load pretrained weights and convert them 
-    if config['TRAIN']['encoder_pretraining_path'] is not None:
-        state = torch.load(config['TRAIN']['encoder_pretraining_path'], weights_only=False)
+    pretraining_path = config['TRAIN']['encoder_pretraining_path']
+
+    if pretraining_path is None or pretraining_path == 'null':
+        pretraining = False
+        norms = {'mean': 0.574, 'std': 0.176}
+
+    else:
+        pretraining = True
+        state = torch.load(pretraining_path, weights_only=False)
         state_dict = state['state_dict']
 
         for k in list(state_dict.keys()):
@@ -93,10 +100,8 @@ def main_worker(config):
           # Norms calculated from the CEM1.5M dataset
           norms['mean'] = 0.574
           norms['std'] = 0.176
-    else:
-        raise Exception("Pretrained weights path is None.")
     
-    finetune_layer = config['TRAIN']['finetune_layer']
+    finetune_layer = (config['TRAIN']['finetune_layer'] if pretraining else 'all') 
 
     for pname, param in model.named_parameters():
         if 'encoder' in pname:
