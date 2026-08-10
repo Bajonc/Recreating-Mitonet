@@ -155,14 +155,24 @@ def run_benchmark(config):
         except Exception as e:
             print(f"error evaluating {model_name}")
 
-    print("\n" + "#" * 65)
-    print(f"{'Model Checkpoint':<35} | {'IoU':<10} | {'F1@75':<10}")
-    print("=" * 65)
+    
+    spaces = 47  
+    header = f"{'Model Checkpoint':<45} |"
+    for metric in config['EVAL']['metrics']:
+        header += f" {metric['name']:<12} |"
+        spaces += 15  
+    
+    print("\n" + "=" * spaces)
+    print(header)
+    print("=" * spaces)
+    
     for res in summary_results:
-        iou_val = res.get('mitochondrion_semantic_iou', 0.0)
-        f1_val = res.get('mitochondrion_f1_75', 0.0)
-        print(f"{res['model']:<35} | {iou_val:<10.4f} | {f1_val:<10.4f}")
-    print("=" * 65)
+        output = f"{res['model']:<45} |"
+        for metric, result in res.items():
+            if metric != 'model':
+                output += f" {result:<12.4f} |"
+        print(output)
+    print("=" * spaces)
     
 
 
