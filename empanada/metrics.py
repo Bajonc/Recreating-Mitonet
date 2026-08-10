@@ -1,3 +1,8 @@
+'''
+Changes:
+- added AP and MSA metrics
+'''
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -7,7 +12,7 @@ from empanada.inference.matcher import fast_matcher
 __all__ = [
     'EMAMeter',
     'AverageMeter',
-    'IoU', 'PQ', 'F1',
+    'IoU', 'PQ', 'F1', 'AP', 'MSA',
     'ComposeMetrics'
 ]
 
@@ -268,6 +273,151 @@ class F1(_BaseMetric):
             else:
                 f1 = tp / (tp + 0.5 * fn + 0.5 * fp)
                 per_class_results[label] = f1
+
+        return per_class_results
+
+
+class AP(_BaseMetric):
+    r"""Computes the AP between output and target instance segmentation
+    classes. Input is expected to be a dictionary for each.
+
+    Args:
+        meter: EMAMeter or AverageMeter to track
+        labels: List of all instance labels to compare
+        label_divisor: Integer. Label divisor used during postprocessing.
+        iou_thr: Float, IoU threshold at which to determine TP, FP, FN detections.
+        output_key: Key in the output dictionary to compare.
+        target_key: Key in the target dictionary to compare.
+
+    """
+    def __init__(
+        self,
+        meter,
+        labels,
+        label_divisor,
+        iou_thr=0.5,
+        output_key='pan_seg',
+        target_key='pan_seg',
+        **kwargs
+    ):
+        super().__init__(meter, labels)
+        self.label_divisor = label_divisor
+        self.iou_thr = iou_thr
+        self.output_key = output_key
+        self.target_key = target_key
+
+    def _to_class_seg(self, pan_seg, label):
+        instance_seg = np.copy(pan_seg) # copy for safety
+        min_id = label * self.label_divisor
+        max_id = min_id + self.label_divisor
+
+        # zero all objects/semantic segs outside of instance_id range
+        outside_mask = np.logical_or(instance_seg < min_id, instance_seg >= max_id)
+        instance_seg[outside_mask] = 0
+        return instance_seg
+
+    def calculate(self, output, target):
+        # convert tensors to numpy
+        output = output[self.output_key].squeeze().long().cpu().numpy()
+        target = target[self.target_key].squeeze().long().cpu().numpy()
+
+        # compute the panoptic quality, per class
+        per_class_results = {}
+        for label in self.labels:
+            pred_class_seg = self._to_class_seg(output, label)
+            tgt_class_seg = self._to_class_seg(target, label)
+
+            # match the segmentations
+            matched_labels, all_labels, matched_ious = \
+            fast_matcher(tgt_class_seg, pred_class_seg, iou_thr=self.iou_thr)
+
+            tp = len(matched_labels[0])
+            fn = len(np.setdiff1d(all_labels[0], matched_labels[0]))
+            fp = len(np.setdiff1d(all_labels[1], matched_labels[1]))
+
+            if tp + fp + fn == 0:
+                # by convention, AP is 1 for empty masks
+                per_class_results[label] = 1.
+            else:
+                ap = tp / (tp + fn + fp)
+                per_class_results[label] = ap
+
+        return per_class_results
+
+class MSA(_BaseMetric):
+    r"""Computes the MSA between output and target instance segmentation
+    classes. Input is expected to be a dictionary for each.
+
+    Args:
+        meter: EMAMeter or AverageMeter to track
+        labels: List of all instance labels to compare
+        label_divisor: Integer. Label divisor used during postprocessing.
+        iou_thr_start: start value of the IoU threshold range at which to determine TP, FP, FN detections.
+        iou_thr_end: end value of IoU threshold range (not included) at which to determine TP, FP, FN detections.
+        iou_step: step between each value
+        output_key: Key in the output dictionary to compare.
+        target_key: Key in the target dictionary to compare.
+
+    """
+    def __init__(
+        self,
+        meter,
+        labels,
+        label_divisor,
+        iou_thr_start = 0.5,
+        iou_thr_end = 1,
+        iou_step = 0.05,
+        output_key='pan_seg',
+        target_key='pan_seg',
+        **kwargs
+    ):
+        super().__init__(meter, labels)
+        self.label_divisor = label_divisor
+        self.iou_thrs = np.arange(iou_thr_start, iou_thr_end, iou_step).round(4) 
+        self.output_key = output_key
+        self.target_key = target_key
+
+    def _to_class_seg(self, pan_seg, label):
+        instance_seg = np.copy(pan_seg) # copy for safety
+        min_id = label * self.label_divisor
+        max_id = min_id + self.label_divisor
+
+        # zero all objects/semantic segs outside of instance_id range
+        outside_mask = np.logical_or(instance_seg < min_id, instance_seg >= max_id)
+        instance_seg[outside_mask] = 0
+        return instance_seg
+
+    def calculate(self, output, target):
+        # convert tensors to numpy
+        output = output[self.output_key].squeeze().long().cpu().numpy()
+        target = target[self.target_key].squeeze().long().cpu().numpy()
+
+        # compute the panoptic quality, per class
+        per_class_results = {}
+        for label in self.labels:
+            pred_class_seg = self._to_class_seg(output, label)
+            tgt_class_seg = self._to_class_seg(target, label)
+            per_class_results[label] = 0
+
+            for thr in self.iou_thrs:
+                # match the segmentations
+                matched_labels, all_labels, matched_ious = \
+                fast_matcher(tgt_class_seg, pred_class_seg, iou_thr=thr)
+
+                tp = len(matched_labels[0])
+                fn = len(np.setdiff1d(all_labels[0], matched_labels[0]))
+                fp = len(np.setdiff1d(all_labels[1], matched_labels[1]))
+
+                if tp + fp + fn == 0:
+                    # by convention, AP is 1 for empty masks
+                    per_class_results[label] += 1.
+                else:
+                    ap = tp / (tp + fn + fp)
+                    per_class_results[label] += ap
+
+        for k, v in per_class_results.items():
+            per_class_results[k] *= 1/(len(self.iou_thrs))
+
 
         return per_class_results
 
