@@ -18,7 +18,7 @@ EVAL:
     - { metric: "AP", name: "AP@50", labels: [1], label_divisor: 1000, iou_thr: 0.50, output_key: "pan_seg", target_key: "pan_seg" }
     - { metric: "AP", name: "AP@75", labels: [1], label_divisor: 1000, iou_thr: 0.75, output_key: "pan_seg", target_key: "pan_seg" }
     - { metric: "PQ", name: "PQ", labels: [1], label_divisor: 1000, iou_thr: 0.75, output_key: "pan_seg", target_key: "pan_seg" }
-    #    - { metric: "MSA", name: "MSA", labels: [1], label_divisor: 1000, output_key: "pan_seg", target_ley: "pan_seg"}
+    #    - { metric: "MSA", name: "MSA", labels: [1], label_divisor: 1000, output_key: "pan_seg", target_key: "pan_seg"}
     
 
   engine_params:
