@@ -1,6 +1,7 @@
 '''
 Changes:
 - added AP and MSA metrics
+- added a 'global' option that supports calculating metrics over the whole dataset instead of per image, currently supports only one class segmentation
 '''
 
 import numpy as np
@@ -90,6 +91,11 @@ class IoU(_BaseMetric):
         super().__init__(meter, labels)
         self.output_key = output_key
         self.target_key = target_key
+        self.reset()
+
+    def reset(self):
+        super().reset()
+        self.global_state = {'I':0, 'U':0}
 
     def calculate(self, output, target):
         # only require the semantic segmentation
@@ -130,10 +136,11 @@ class IoU(_BaseMetric):
         # (N,)
         dims = (0,) + tuple(range(2, target.ndimension()))
         intersect = torch.sum(output * target, dims)
+        self.global_state['I'] += intersect.item()
 
         # compute the union, (N,)
         union = torch.sum(output, dims) + torch.sum(target, dims) - intersect
-
+        self.global_state['U'] += union.item()
         # avoid division errors by adding a small epsilon
         # evaluates to iou of 1 when intersect and union are 0
         iou = (intersect + 1e-5) / (union + 1e-5)
@@ -142,6 +149,10 @@ class IoU(_BaseMetric):
             return {self.labels[0]: iou.item()}
         else:
             return {l: iou[l] for l in self.labels}
+
+    def calculate_global(self):
+        return (self.global_state["I"] + 1e-5) / (self.global_state["U"] + 1e-5)
+
 
 class PQ(_BaseMetric):
     r"""Computes the panoptic quality between output and target.
@@ -168,6 +179,11 @@ class PQ(_BaseMetric):
         self.label_divisor = label_divisor
         self.output_key = output_key
         self.target_key = target_key
+        self.reset()
+
+    def reset(self):
+        super().reset()
+        self.global_state = {"matched_ious":0, "tp":0, "fp":0, "fn":0}
 
     def _to_class_seg(self, pan_seg, label):
         instance_seg = np.copy(pan_seg) # copy for safety
@@ -203,11 +219,23 @@ class PQ(_BaseMetric):
                 per_class_results[label] = 1.
                 continue
 
+            self.global_state["matched_ious"] += matched_ious.sum()
+            self.global_state["tp"] += tp
+            self.global_state["fp"] += fp
+            self.global_state["fn"] += fn
+
             sq = matched_ious.sum() / (tp + 1e-5)
             rq = tp / (tp + 0.5 * fp + 0.5 * fn)
             per_class_results[label] = sq * rq
 
         return per_class_results
+
+    def calculate_global(self):
+        tp, fp, fn =  self.global_state["tp"], self.global_state["fp"],  self.global_state["fn"]
+        sq = self.global_state["matched_ious"] / (tp + 1e-5)
+        rq = tp / (tp + 0.5 * fp + 0.5 * fn)
+
+        return sq*rq
 
 class F1(_BaseMetric):
     r"""Computes the F1 between output and target instance segmentation
@@ -237,6 +265,11 @@ class F1(_BaseMetric):
         self.iou_thr = iou_thr
         self.output_key = output_key
         self.target_key = target_key
+        self.reset()
+
+    def reset(self):
+        super().reset()
+        self.global_state = {"tp":0, "fp":0, "fn":0}
 
     def _to_class_seg(self, pan_seg, label):
         instance_seg = np.copy(pan_seg) # copy for safety
@@ -267,6 +300,11 @@ class F1(_BaseMetric):
             fn = len(np.setdiff1d(all_labels[0], matched_labels[0]))
             fp = len(np.setdiff1d(all_labels[1], matched_labels[1]))
 
+            self.global_state["tp"] += tp
+            self.global_state["fp"] += fp
+            self.global_state["fn"] += fn
+
+
             if tp + fp + fn == 0:
                 # by convention, F1 is 1 for empty masks
                 per_class_results[label] = 1.
@@ -276,7 +314,10 @@ class F1(_BaseMetric):
 
         return per_class_results
 
-
+    def calculate_global(self):
+        tp, fp, fn =  self.global_state["tp"], self.global_state["fp"],  self.global_state["fn"] 
+        return tp / (tp + 0.5 * fn + 0.5 * fp)
+    
 class AP(_BaseMetric):
     r"""Computes the AP between output and target instance segmentation
     classes. Input is expected to be a dictionary for each.
@@ -305,6 +346,11 @@ class AP(_BaseMetric):
         self.iou_thr = iou_thr
         self.output_key = output_key
         self.target_key = target_key
+        self.reset()
+
+    def reset(self):
+        super().reset()
+        self.global_state = {"tp":0, "fp":0, "fn":0}
 
     def _to_class_seg(self, pan_seg, label):
         instance_seg = np.copy(pan_seg) # copy for safety
@@ -335,6 +381,11 @@ class AP(_BaseMetric):
             fn = len(np.setdiff1d(all_labels[0], matched_labels[0]))
             fp = len(np.setdiff1d(all_labels[1], matched_labels[1]))
 
+            self.global_state["tp"] += tp
+            self.global_state["fp"] += fp
+            self.global_state["fn"] += fn
+
+
             if tp + fp + fn == 0:
                 # by convention, AP is 1 for empty masks
                 per_class_results[label] = 1.
@@ -343,6 +394,10 @@ class AP(_BaseMetric):
                 per_class_results[label] = ap
 
         return per_class_results
+
+    def calculate_global(self):
+        tp, fp, fn =  self.global_state["tp"], self.global_state["fp"],  self.global_state["fn"] 
+        return tp / (tp + fn + fp)
 
 class MSA(_BaseMetric):
     r"""Computes the MSA between output and target instance segmentation
@@ -376,6 +431,11 @@ class MSA(_BaseMetric):
         self.iou_thrs = np.arange(iou_thr_start, iou_thr_end, iou_step).round(4) 
         self.output_key = output_key
         self.target_key = target_key
+        self.reset()
+
+    def reset(self):
+        super().reset()
+        self.global_state = {f"{iou_thr.round(4)}":{"tp":0, "fp":0, "fn":0} for iou_thr in self.iou_thrs}
 
     def _to_class_seg(self, pan_seg, label):
         instance_seg = np.copy(pan_seg) # copy for safety
@@ -408,6 +468,10 @@ class MSA(_BaseMetric):
                 fn = len(np.setdiff1d(all_labels[0], matched_labels[0]))
                 fp = len(np.setdiff1d(all_labels[1], matched_labels[1]))
 
+                self.global_state[f"{thr}"]["tp"] += tp
+                self.global_state[f"{thr}"]["fp"] += fp
+                self.global_state[f"{thr}"]["fn"] += fn
+
                 if tp + fp + fn == 0:
                     # by convention, AP is 1 for empty masks
                     per_class_results[label] += 1.
@@ -421,6 +485,14 @@ class MSA(_BaseMetric):
 
         return per_class_results
 
+    def calculate_global(self):
+        ap_sum = 0
+        for thr in self.global_state.keys():
+            tp, fp, fn =  self.global_state[thr]["tp"], self.global_state[thr]["fp"],  self.global_state[thr]["fn"]
+            ap_sum += tp / (tp + fn + fp)
+
+        return ap_sum / len(self.global_state.keys())
+     
 class ComposeMetrics:
     r"""Bundles multiple metrics together for easy
     evaluation, printing and logging during training.
@@ -474,3 +546,4 @@ class ComposeMetrics:
                 self.history[name].append(value)
 
             print(name, value)
+
