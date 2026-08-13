@@ -110,11 +110,16 @@ def validate(model, eval_loader, config, device):
 
     results = {}
     for metric_name, metric_obj in meters.metrics_dict.items():
-        avg_scores = metric_obj.average()
-        for label, score in avg_scores.items():
-            class_label = class_names[label]
-            results[f"{class_label}_{metric_name}"] = float(score)
 
+        if config['EVAL']['global']:
+            global_scores = metric_obj.calculate_global()
+            results[f"{metric_name}"] = float(global_scores)
+        else:
+            avg_scores = metric_obj.average()
+            for label, score in avg_scores.items():
+                class_label = class_names[label]
+                results[f"{class_label}_{metric_name}"] = float(score)
+    
     return results
 
 def run_benchmark(config):
@@ -130,6 +135,7 @@ def run_benchmark(config):
     Mitonet_norms = {'mean': 0.57571, 'std': 0.12765}
 
     eval_loader = get_eval_loader(Mitonet_norms, config)
+
 
     scores = validate(Mitonet, eval_loader, config, device)
 
@@ -167,7 +173,7 @@ def run_benchmark(config):
     print("=" * spaces)
     
     for res in summary_results:
-        output = f"{res['model']:<45} |"
+        output = f"{res['model'].replace('-120_checkpoint.pth.tar', ''):<45} |"
         for metric, result in res.items():
             if metric != 'model':
                 output += f" {result:<12.4f} |"
