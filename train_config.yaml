@@ -1,6 +1,8 @@
 # Parameters based on the paper, if the parameter value wasn't mentioned in the paper it was based on empanada's custom_training_pdl.yaml file
 model_name: "YOUR_MODEL_NAME"
 
+WANDB:
+  project: MitoNet
 
 TRAIN:
   # set the lr schedule
