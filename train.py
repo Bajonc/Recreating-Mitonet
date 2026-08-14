@@ -85,12 +85,22 @@ def main_worker(config):
         state = torch.load(pretraining_path, weights_only=False)
         state_dict = state['state_dict']
 
-        for k in list(state_dict.keys()):
-            if not k.startswith('fc'):
-                state_dict['encoder.' + k] = state_dict[k]
-                del state_dict[k]
 
-        model.load_state_dict(state['state_dict'], strict=False)
+        for k in list(state_dict.keys()):
+            clean_k = k.replace('module.','')
+            
+            if clean_k.startswith('fc'):
+                del state_dict[k]
+                continue
+            
+            if clean_k == 'conv1.weight':
+                state_dict[k] = state_dict[k].mean(dim=1, keepdim=True)
+            
+            state_dict['encoder.' + clean_k] = state_dict[k]
+            del state_dict[k]
+
+        msg = model.load_state_dict(state['state_dict'], strict=False)
+        print("=> loaded backbone from checkpoint '{}' with msg {}".format(pretraining_path , msg))
 
         norms = {}
         if state.get('norms') is not None:
@@ -116,7 +126,7 @@ def main_worker(config):
                 param.requires_grad = True
 
     else:
-        valid_layers = ['stage1', 'stage2', 'stage3', 'stage4']
+        valid_layers = ['layer1', 'layer2', 'layer3', 'layer4']
 
         assert finetune_layer in valid_layers
 
