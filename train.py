@@ -30,10 +30,10 @@ import wandb
 from empanada.losses import PanopticLoss
 from empanada import metrics
 from empanada.data.single_class_instance_dataset import SingleClassInstanceDataset
-from empanada.models.panoptic_deeplab import PanopticDeepLabPR
+from empanada import models
 from empanada.inference.engines import PanopticDeepLabEngine
 from empanada.data.utils.transforms import FactorPad
-
+from empanada.models.encoders.convnext import LayerNorm as CustomLayerNorm
 
 def main(config):
     if not os.path.isdir(config['TRAIN']['model_dir']):
@@ -53,26 +53,8 @@ def main_worker(config):
     )
 
     # model used in the paper is PanopticDeepLab
-    model = PanopticDeepLabPR(
-        encoder="resnet50",
-        num_classes=1,
-        stage4_stride=16,
-        decoder_channels=256,
-        low_level_channels_project=[32],
-        atrous_rates=[2, 4, 6],
-        aspp_channels=256,
-        aspp_dropout=0.5,
-        ins_decoder=True,
-        ins_ratio=0.5,
-        low_level_stages=[1],
-        num_fc=3,
-        train_num_points=1024,
-        oversample_ratio=3,
-        importance_sample_ratio=0.75,
-        subdivision_steps=2,
-        subdivision_num_points=8192
-    )
-
+    arch = config['MODEL']['arch']
+    model = models.__dict__[arch](**config['MODEL'])
     # load pretrained weights and convert them 
     pretraining_path = config['TRAIN']['encoder_pretraining_path']
 
@@ -82,24 +64,9 @@ def main_worker(config):
 
     else:
         pretraining = True
-        state = torch.load(pretraining_path, weights_only=False)
-        state_dict = state['state_dict']
+        state, state_dict = load_encoder_weights(pretraining_path, config['MODEL']['encoder'])
 
-
-        for k in list(state_dict.keys()):
-            clean_k = k.replace('module.','')
-            
-            if clean_k.startswith('fc'):
-                del state_dict[k]
-                continue
-            
-            if clean_k == 'conv1.weight':
-                state_dict[k] = state_dict[k].mean(dim=1, keepdim=True)
-            
-            state_dict['encoder.' + clean_k] = state_dict[k]
-            del state_dict[k]
-
-        msg = model.load_state_dict(state['state_dict'], strict=False)
+        msg = model.load_state_dict(state_dict, strict=False)
         print("=> loaded backbone from checkpoint '{}' with msg {}".format(pretraining_path , msg))
 
         norms = {}
@@ -296,12 +263,14 @@ def train(
         scheduler.step()
 
         if loss_meters is None:
-            loss_meters = {}
+            loss_meters = {'total_loss': ProgressEMAMeter('total_loss', ':.4e')}
+            loss_meters['total_loss'].update(loss.item())
             for k, v in aux_loss.items():
                 loss_meters[k] = ProgressEMAMeter(k, ':.4e')
                 loss_meters[k].update(v)
                 progress.meters.append(loss_meters[k])
         else:
+            loss_meters['total_loss'].update(loss.item())
             for k, v in aux_loss.items():
                 loss_meters[k].update(v)
 
@@ -315,10 +284,10 @@ def train(
             progress.display(i)
 
         wandb_train_dict = {
-            f"train/loss_{k}": (v.item() if torch.is_tensor(v) else v)
-            for k, v in aux_loss.items()
+            f"train/loss_{k}": meter.avg
+            for k, meter in loss_meters.items() if k != 'total_loss'
         }
-        wandb_train_dict["train/total_loss"] = loss.item() if torch.is_tensor(loss) else loss
+        wandb_train_dict["train/total_loss"] = loss_meters['total_loss'].avg
         wandb_train_dict["train/learning_rate"] = scheduler.get_last_lr()[0]
         wandb_train_dict["epoch"] = epoch
 
@@ -408,8 +377,12 @@ def validate(
     wandb_val_dict = {"epoch": epoch}
 
     if loss_meters is not None:
-        for k, meter in loss_meters.items():
-            wandb_val_dict[f"val/loss_{k}"] = meter.avg
+        wandb_val_dict.update({
+            f"val/loss_{k}": meter.avg
+            for k, meter in loss_meters.items() if k != 'total_loss'
+        })
+
+        wandb_val_dict["val/total_loss"] = loss_meters['total_loss'].avg
 
     if hasattr(meters, 'meters'):
         for name, meter in meters.meters.items():
@@ -424,7 +397,7 @@ def configure_optimizer(model, weight_decay=0.1, **kwargs):
     decay = set()
     no_decay = set()
 
-    blacklist = (torch.nn.BatchNorm2d,)
+    blacklist = (torch.nn.BatchNorm2d,torch.nn.LayerNorm, CustomLayerNorm)
     for mn, m in model.named_modules():
         for pn, p in m.named_parameters(recurse=False):
             full_name = f"{mn}.{pn}" if mn else pn
@@ -452,6 +425,45 @@ def configure_optimizer(model, weight_decay=0.1, **kwargs):
     ]
 
     return optim.AdamW(param_groups, **kwargs)
+
+def load_encoder_weights(pretraining_path: str, encoder: str) -> dict:
+    '''Loads encoder weights depending on the encoder type'''
+    
+    state = torch.load(pretraining_path, weights_only = False)
+    state_dict = state.get('state_dict', state)
+
+    if 'resnet' in encoder:
+        
+        for k in list(state_dict.keys()):
+            clean_k = k.replace('module.','')
+    
+            if clean_k.startswith('fc'):
+                del state_dict[k]
+                continue
+
+            if clean_k == 'conv1.weight':
+                state_dict[k] = state_dict[k].mean(dim=1, keepdim=True)
+
+            state_dict['encoder.' + clean_k] = state_dict[k]
+            del state_dict[k]
+
+    elif 'convnext' in encoder:
+
+        for k in list(state_dict.keys()):
+            clean_k = k.replace('module.','')
+    
+            if clean_k.startswith('fc'):
+                del state_dict[k]
+                continue
+    
+            if clean_k == 'downsample_layers.0.0.weight':
+                state_dict[k] = state_dict[k].mean(dim=1, keepdim=True)
+                
+            state_dict['encoder.' + 'model.' + clean_k] = state_dict[k]
+            del state_dict[k]
+
+    return state, state_dict
+        
 
 def parse_args():
     parser = argparse.ArgumentParser(description="YAML config")
@@ -502,6 +514,7 @@ class ProgressMeter:
         num_digits = len(str(num_batches // 1))
         fmt = '{:' + str(num_digits) + 'd}'
         return '[' + fmt + '/' + fmt.format(num_batches) + ']'
+
 
 
 if __name__ == "__main__":
