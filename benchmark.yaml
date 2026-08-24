@@ -4,6 +4,21 @@ MODELS:
 # etc.
 ORIGINAL_MODEL: "ORIGINAL_MODEL_PATH"
 
+# The architecture of the models that are being benchmarked, currently mixed model benchmarking is not supported
+MODELS_ARCHITECTURE:
+  arch: "PanopticDeepLabPR"
+  encoder: "resnet50"
+  num_classes: 1
+  stage4_stride: 16
+  decoder_channels: 256
+  low_level_stages: [ 1 ]
+  low_level_channels_project: [ 32 ]
+  atrous_rates: [ 2, 4, 6 ]
+  aspp_channels: 256
+  aspp_dropout: 0.5
+  ins_decoder: True
+  ins_ratio: 0.5
+
 EVAL:
   eval_dir: "YOUR_EVAL_DIR"
   batch_size: 1
