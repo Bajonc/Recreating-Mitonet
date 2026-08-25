@@ -55,12 +55,14 @@ def main_worker(config):
     # model used in the paper is PanopticDeepLab
     arch = config['MODEL']['arch']
     model = models.__dict__[arch](**config['MODEL'])
+
     # load pretrained weights and convert them 
     pretraining_path = config['TRAIN']['encoder_pretraining_path']
+    pretraining_norms = config['TRAIN']['pretraining_norms']
 
     if pretraining_path is None or pretraining_path == 'null':
         pretraining = False
-        norms = {'mean': 0.574, 'std': 0.176}
+        norms = pretraining_norms
 
     else:
         pretraining = True
@@ -73,11 +75,10 @@ def main_worker(config):
         if state.get('norms') is not None:
           norms['mean'] = state['norms'][0]
           norms['std'] = state['norms'][1]
-        else:
-          # Norms calculated from the CEM1.5M dataset
-          norms['mean'] = 0.574
-          norms['std'] = 0.176
-    
+        else:  
+            norms = pretraining_norms
+         #   norms = {'mean': 0.57571, 'std': 0.12765}
+         
     finetune_layer = (config['TRAIN']['finetune_layer'] if pretraining else 'all') 
 
     for pname, param in model.named_parameters():
@@ -463,7 +464,6 @@ def load_encoder_weights(pretraining_path: str, encoder: str) -> dict:
             del state_dict[k]
 
     return state, state_dict
-        
 
 def parse_args():
     parser = argparse.ArgumentParser(description="YAML config")
