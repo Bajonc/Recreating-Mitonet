@@ -58,13 +58,15 @@ TRAIN:
   model_dir: YOUR_MODEL_DIR
   save_freq: 20
 
-  # pretraining parameters
   encoder_pretraining_path: YOUR_PRETRAINING_WEIGHTS_PATH
   finetune_layer: 'all'
+  
+  # norms to default to if not found in the model dictionary 
+  pretraining_norms: {'mean': 0.574, std: 0.157}
 
 EVAL:
   eval_dir: YOUR_EVAL_DIR
-  epochs_per_eval: 10
+  epochs_per_eval: 2
 
   # parameters needed for eval_metrics
   metrics:
