@@ -24,6 +24,7 @@ To recreate mitonet:
 
 To benchmark:
 - Download original mitonet weights to benchmark against
+- Switch to environment fulfilling mitonet training requirements
 - Fill in the benchmark.yaml file with the paths to the models you wish to benchmark and the downloaded weights
 - Run the benchmark.py file
 
