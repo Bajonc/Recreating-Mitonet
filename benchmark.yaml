@@ -38,6 +38,7 @@ EVAL:
     thing_list: [ 1 ]
     label_divisor: 1000
     stuff_area: 64
+    # Pixel area of instance predictions to be ignored in benchmarking
     thing_area: 150
     void_label: 0
     nms_threshold: 0.1
