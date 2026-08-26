@@ -15,9 +15,20 @@ MitoNet uses SwaV to pretrain on 1.5M unlabeled electron microscopy mitochondria
 Done on labeled electron microscopy mitochondria images, the code from this part required major changes
 
 ### Tutorial
-- fill in a pretraining script of your choosing and run it
-- put the path to your pretrained weights into the config file
-- fill in the training script and config file
-- run the training script
+To recreate mitonet:
+- Switch to environment fulfilling swav requirements
+- Fill out the shell script in the swav directory and run it
+- Switch to environment fulfilling mitonet training requirements 
+- Replace the capitalized values in the train_config.yaml The most important part is the path to the final checkpoint produced by the pretraining script.
+- Replace the capitalized values in the train.sh script and run it
 
-I recommend using some sort of environment manager as the version and package requirements can differ wildly between training and pretraining 
+To benchmark:
+- Download original mitonet weights to benchmark against
+- Fill in the benchmark.yaml file with the paths to the models you wish to benchmark and the downloaded weights
+- Run the benchmark.py file
+
+To experiment:
+- Currently the code supports different ResNet sizes and different ConvNeXt sizes that can be changed under model architecture in the training script.
+- Pretraining of different encoders than ResNet is currently not supported 
+
+It is recommended to use a package manager as the requirements for pretraining and training differ
