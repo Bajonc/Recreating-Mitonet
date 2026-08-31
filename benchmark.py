@@ -14,7 +14,7 @@ from empanada.data.single_class_instance_dataset import SingleClassInstanceDatas
 from empanada.data.utils.transforms import FactorPad
 import empanada.metrics as metrics
 
-from my_train import ProgressMeter, ProgressAverageMeter
+from train import ProgressMeter, ProgressAverageMeter
 
 cem_norms = {'mean': 0.574, 'std': 0.176}
 
