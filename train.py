@@ -1,7 +1,7 @@
 '''
 Adapted from https://github.com/volume-em/empanada-napari/blob/main/empanada_napari/train.py
 
-Changed to be independant from the GUI and specialised for MitoNet recreation hardcoding parameters and architectures to match the paper
+Changed to be independent from the GUI and specialised for MitoNet recreation hardcoding parameters and architectures to match the paper
 '''
 
 import os
