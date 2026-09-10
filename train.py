@@ -148,15 +148,9 @@ def main_worker(config):
         eval_loader = None
 
     # Loss as specified in the paper
-    criterion = PanopticLoss(
-        ce_weight=1,
-        mse_weight=200,
-        l1_weight=0.01,
-        top_k_percent=0.2,
-        pr_weight=1
-    )
+    criterion = PanopticLoss(**config['TRAIN']['loss_params'])
 
-    optimizer = configure_optimizer(model, weight_decay=0.1)
+    optimizer = configure_optimizer(model, weight_decay=config['TRAIN']['weight_decay'])
     schedule_params = config['TRAIN']['schedule_params']
 
     if 'steps_per_epoch' in schedule_params:
