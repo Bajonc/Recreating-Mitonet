@@ -6,6 +6,10 @@ from skimage import io
 from empanada.data._base import _BaseDataset
 from empanada.data.utils import heatmap_and_offsets
 
+'''
+- added filtering for instances smaller than given threshold
+'''
+
 __all__ = [
     'SingleClassInstanceDataset'
 ]
@@ -34,11 +38,13 @@ class SingleClassInstanceDataset(_BaseDataset):
         transforms=None,
         heatmap_sigma=6,
         weight_gamma=0.3,
+        threshold = 10
     ):
         super(SingleClassInstanceDataset, self).__init__(
             data_dir, transforms, weight_gamma
         )
         self.heatmap_sigma = heatmap_sigma
+        self.threshold = threshold
 
     def __getitem__(self, idx):
         # transformed and paste example
@@ -56,6 +62,13 @@ class SingleClassInstanceDataset(_BaseDataset):
             output = {'image': image, 'mask': mask}
 
         mask = output['mask']
+
+        # filter out instances smaller than threshold 
+        values, counts = torch.unique(mask, return_counts = True)
+        small_ids = values[counts <= self.threshold]
+        mask[torch.isin(mask, small_ids)] = 0                
+        
+
         heatmap, offsets = heatmap_and_offsets(mask, self.heatmap_sigma)
         output['ctr_hmp'] = heatmap
         output['offsets'] = offsets
