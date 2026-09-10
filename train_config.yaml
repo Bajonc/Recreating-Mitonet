@@ -43,7 +43,7 @@ TRAIN:
 
   # data loading parameters
   batch_size: 256
-  workers: 4  
+  workers: 2
 
   augmentations:
     - { aug: "RandomScale", scale_limit: [ -0.9, 1 ]}
@@ -63,6 +63,19 @@ TRAIN:
   
   # norms to default to if not found in the model dictionary 
   pretraining_norms: {'mean': 0.574, std: 0.157}
+
+  # instances below this size will be filtered out from the masks
+  minimum_instance_size: 10
+
+  # loss parameters as specified in the paper
+  loss_params:
+    ce_weight: 1
+    mse_weight: 200
+    l1_weight: 0.01
+    top_k_percent: 0.2
+    pr_weight: 1
+
+  weight_decay: 0.1
 
 EVAL:
   eval_dir: YOUR_EVAL_DIR
