@@ -4,7 +4,8 @@
 # the terms of the DINOv3 License Agreement.
 
 """
-Added code that adapts ConvNext to the architecture that empanada's PanopticDeepLab implementation expects
+- Added adaptation that fits the PanopticDeepLab implementation
+- Added support for stage 4 stride of 16
 """
 
 import logging
@@ -56,9 +57,9 @@ class Block(nn.Module):
     Source: https://github.com/facebookresearch/ConvNeXt/blob/main/models/convnext.py
     """
 
-    def __init__(self, dim, drop_path=0.0, layer_scale_init_value=1e-6):
+    def __init__(self, dim, drop_path=0.0, layer_scale_init_value=1e-6, padding = 3, dilation = 1):
         super().__init__()
-        self.dwconv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim)  # depthwise conv
+        self.dwconv = nn.Conv2d(dim, dim, kernel_size=7, padding=padding, groups=dim, dilation = dilation )  # depthwise conv
         self.norm = LayerNorm(dim, eps=1e-6)
         self.pwconv1 = nn.Linear(dim, 4 * dim)  # pointwise/1x1 convs, implemented with linear layers
         self.act = nn.GELU()
@@ -148,6 +149,7 @@ class ConvNeXt(nn.Module):
         layer_scale_init_value: float = 1e-6,
         # DINO arguments
         patch_size: Optional[int] = None,
+        stage4_stride = 32,
         **ignored_kwargs,
     ):
         super().__init__()
@@ -162,10 +164,26 @@ class ConvNeXt(nn.Module):
             LayerNorm(dims[0], eps=1e-6, data_format="channels_first"),
         )
         self.downsample_layers.append(stem)
-        for i in range(3):
+        for i in range(2):
             downsample_layer = nn.Sequential(
                 LayerNorm(dims[i], eps=1e-6, data_format="channels_first"),
                 nn.Conv2d(dims[i], dims[i + 1], kernel_size=2, stride=2),
+            )
+            self.downsample_layers.append(downsample_layer)
+
+        assert stage4_stride in [16,32]
+
+        if stage4_stride == 32:
+            downsample_layer = nn.Sequential(
+                LayerNorm(dims[2], eps=1e-6, data_format="channels_first"),
+                nn.Conv2d(dims[2], dims[2 + 1], kernel_size=2, stride=2),
+            )
+            self.downsample_layers.append(downsample_layer)
+
+        if stage4_stride == 16:
+            downsample_layer = nn.Sequential(
+                LayerNorm(dims[2], eps=1e-6, data_format="channels_first"),
+                nn.Conv2d(dims[2], dims[2 + 1], kernel_size=1, stride=1, padding = 0),
             )
             self.downsample_layers.append(downsample_layer)
 
@@ -175,7 +193,8 @@ class ConvNeXt(nn.Module):
         for i in range(4):
             stage = nn.Sequential(
                 *[
-                    Block(dim=dims[i], drop_path=dp_rates[cur + j], layer_scale_init_value=layer_scale_init_value)
+                    Block(dim=dims[i], drop_path=dp_rates[cur + j], layer_scale_init_value=layer_scale_init_value, padding = (6 if i == 3 and stage4_stride == 16 else 3),
+                          dilation = (2 if i == 3 and stage4_stride == 16 else 1))
                     for j in range(depths[i])
                 ]
             )
@@ -319,49 +338,19 @@ class ConvNeXt(nn.Module):
         return tuple(outputs)
 
 
-convnext_sizes = {
-    "tiny": dict(
-        depths=[3, 3, 9, 3],
-        dims=[96, 192, 384, 768],
-    ),
-    "small": dict(
-        depths=[3, 3, 27, 3],
-        dims=[96, 192, 384, 768],
-    ),
-    "base": dict(
-        depths=[3, 3, 27, 3],
-        dims=[128, 256, 512, 1024],
-    ),
-    "large": dict(
-        depths=[3, 3, 27, 3],
-        dims=[192, 384, 768, 1536],
-    ),
-}
 
-
-def get_convnext_arch(arch_name):
-    size_dict = None
-    query_sizename = arch_name.split("_")[1]
-    try:
-        size_dict = convnext_sizes[query_sizename]
-    except KeyError:
-        raise NotImplementedError("didn't recognize vit size string")
-
-    return partial(
-        ConvNeXt,
-        **size_dict,
-    )
 
 class ConvNeXtConfig:
+    ''' created to match PanopticDeepLab architecture '''
     def __init__(self, widths):
         self.widths = torch.tensor(widths).long()
 
 
 class ConvNeXtEncoder(nn.Module):
-    def __init__(self, arch_name="convnext_tiny", in_channels=1, **kwargs):
+    def __init__(self, in_channels=1, stage4_stride = 32, dims = [96, 192, 384, 768], depths = [3, 3, 9, 3], **kwargs):
         super().__init__()
-        convnext_fn = get_convnext_arch(arch_name)
-        self.model = convnext_fn(in_chans=in_channels)
+        self.model = ConvNeXt(in_chans=in_channels, stage4_stride = stage4_stride, dims = dims, depths = depths, **kwargs)
+        self.model.init_weights()
         
         dims = self.model.embed_dims 
         
@@ -374,18 +363,17 @@ class ConvNeXtEncoder(nn.Module):
             x = self.model.stages[i](x)
             feats.append(x)
             
-        # Returns 5 feature maps: [stride 4, stride 4, stride 8, stride 16, stride 32]
         return [feats[0], feats[0], feats[1], feats[2], feats[3]]
 
 
 def convnext_tiny(in_channels=1, output_stride=32, **kwargs):
-    return ConvNeXtEncoder(arch_name="convnext_tiny", in_channels=in_channels)
+    return ConvNeXtEncoder(stage4_stride = output_stride, in_channels=in_channels, dims = [96, 192, 384, 768], depths=[3, 3, 9, 3], **kwargs)
 
 def convnext_small(in_channels=1, output_stride=32, **kwargs):
-    return ConvNeXtEncoder(arch_name="convnext_small", in_channels=in_channels)
+    return ConvNeXtEncoder(stage4_stride = output_stride, in_channels=in_channels, dims=[96, 192, 384, 768], depths=[3, 3, 27, 3], **kwargs) 
 
 def convnext_base(in_channels=1, output_stride=32, **kwargs):
-    return ConvNeXtEncoder(arch_name="convnext_base", in_channels=in_channels)
+    return ConvNeXtEncoder(stage4_stride = output_stride, in_channels=in_channels, dims=[128, 256, 512, 1024],depths=[3, 3, 27, 3], **kwargs )
 
 def convnext_large(in_channels=1, output_stride=32, **kwargs):
-    return ConvNeXtEncoder(arch_name="convnext_large", in_channels=in_channels)
+    return ConvNeXtEncoder(stage4_stride = output_stride, in_channels=in_channels, dims=[192, 384, 768, 1536], depths=[3, 3, 27, 3], **kwargs )
