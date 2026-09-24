@@ -33,3 +33,10 @@ To experiment:
 - Pretraining of different encoders than ResNet is currently not supported 
 
 It is recommended to use a package manager as the requirements for pretraining and training differ
+
+
+## Models
+| encoder | pretrain | model |
+| :---: | :---: | :---: |
+| resnet50 | CEM1.5M | [HuggingFace](https://huggingface.co/Bajonc/resnet50_cem1.5M_recreated/resolve/main/resnet50_cem1.5M_recreated_pretraining.pth.tar) |
+| resnet50 | ImageNet | [HuggingFace](https://huggingface.co/Bajonc/resnet50_imagenet_pretraining/resolve/main/resnet50_ImageNet_pretrain.pth.tar) |
