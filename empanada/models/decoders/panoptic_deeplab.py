@@ -11,7 +11,7 @@ https://github.com/bowenc0221/panoptic-deeplab/blob/master/segmentation/model/de
 import torch
 from torch import nn
 from torch.nn import functional as F
-from empanada.models.aspp import ASPP
+from empanada.models.decoders.aspp import ASPP
 from empanada.models.blocks import *
 from typing import List
 
