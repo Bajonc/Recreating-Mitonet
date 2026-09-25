@@ -65,7 +65,7 @@ TRAIN:
   pretraining_norms: {'mean': 0.574, std: 0.157}
 
   # instances below this size will be filtered out from the masks
-  minimum_instance_size: 10
+  minimum_instance_size: 0
 
   # loss parameters as specified in the paper
   loss_params:
