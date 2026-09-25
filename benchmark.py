@@ -96,10 +96,10 @@ def validate(model, eval_loader, config, device):
             semantic = engine._harden_seg(output['sem'])
 
             output['pan_seg'] = engine.postprocess(
-                semantic, output['ctr_hmp'], output['offsets']
+                semantic, output['ctr_hmp'], output['offsets'], is_target = False
             )
             target['pan_seg'] = engine.postprocess(
-                target['sem'].unsqueeze(1), target['ctr_hmp'], target['offsets']
+                target['sem'].unsqueeze(1), target['ctr_hmp'], target['offsets'], is_target = True
             )
 
             meters.evaluate(output, target)
