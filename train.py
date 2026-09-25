@@ -77,8 +77,8 @@ def main_worker(config):
           norms['std'] = state['norms'][1]
         else:  
             norms = pretraining_norms
-         #   norms = {'mean': 0.57571, 'std': 0.12765}
-         
+
+    # layer freezing for ConvNeXt, swin and swinv2 not supported      
     finetune_layer = (config['TRAIN']['finetune_layer'] if pretraining else 'all') 
 
     for pname, param in model.named_parameters():
@@ -169,7 +169,6 @@ def main_worker(config):
         raise Exception('Number of training epochs not defined!')
 
     # Step tracking for W&B logging
-
     global_step = 0
 
     for epoch in range(epochs):
@@ -455,6 +454,16 @@ def load_encoder_weights(pretraining_path: str, encoder: str) -> dict:
                 state_dict[k] = state_dict[k].mean(dim=1, keepdim=True)
                 
             state_dict['encoder.' + 'model.' + clean_k] = state_dict[k]
+            del state_dict[k]
+    
+    elif 'swin' in encoder:
+        state_dict = state_dict["model"]
+        for k in list(state_dict.keys()):
+
+            if k == "patch_embed.proj.weight":
+                state_dict[k] = state_dict[k].mean(dim=1, keepdim=True)
+
+            state_dict['encoder.' + 'model.' + k] = state_dict[k]
             del state_dict[k]
 
     return state, state_dict
