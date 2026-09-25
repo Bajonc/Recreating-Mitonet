@@ -314,7 +314,8 @@ def get_panoptic_segmentation(
     thing_area: int,
     void_label: int,
     threshold: float=0.1,
-    nms_kernel: int=7
+    nms_kernel: int=7,
+    is_target: bool = False
 ):
     r"""Post-processing for panoptic segmentation.
 
@@ -341,6 +342,8 @@ def get_panoptic_segmentation(
 
         nms_kernel: An Integer, NMS max pooling kernel size. Default 7.
 
+        is_target: Boolean, is used to differentiate between postprocessing of target and prediction
+
     Returns:
         pan_seg: A Tensor of shape (1, H, W) of type torch.long.
 
@@ -359,6 +362,9 @@ def get_panoptic_segmentation(
     instance, center = get_instance_segmentation(
         sem, ctr_hmp, offsets, thing_list, threshold=threshold, nms_kernel=nms_kernel
     )
+
+    if is_target:
+        thing_are = 0
 
     panoptic = merge_semantic_and_instance(
         sem, instance, label_divisor, thing_list, stuff_area, thing_area, void_label
