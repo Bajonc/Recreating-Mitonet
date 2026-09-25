@@ -36,7 +36,10 @@ It is recommended to use a package manager as the requirements for pretraining a
 
 
 ## Models
-| encoder | pretrain | model |
-| :---: | :---: | :---: |
-| resnet50 | CEM1.5M | [HuggingFace](https://huggingface.co/Bajonc/resnet50_cem1.5M_recreated/resolve/main/resnet50_cem1.5M_recreated_pretraining.pth.tar) |
-| resnet50 | ImageNet | [HuggingFace](https://huggingface.co/Bajonc/resnet50_imagenet_pretraining/resolve/main/resnet50_ImageNet_pretrain.pth.tar) |
+
+Results were benchmarked with global set to True and thing_area set to 150 in benchmark.yaml
+
+| encoder | pretrain | semantic_iou | f1@50 | f1@75 | AP@50 | AP@75 | PQ | MSA | #params | model |
+| :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| resnet50 | CEM1.5M | 0.771 | 0.757 | 0.669 | 0.609 | 0.502 | 0.662 | 0.455 | 25M | [HuggingFace](https://huggingface.co/Bajonc/resnet50_cem1.5M_recreated/resolve/main/resnet50_cem1.5M_recreated_pretraining.pth.tar) |
+| resnet50 | ImageNet | | | | | | | | 25M | [HuggingFace](https://huggingface.co/Bajonc/resnet50_imagenet_pretraining/resolve/main/resnet50_ImageNet_pretrain.pth.tar) |
