@@ -139,12 +139,12 @@ class PanopticDeepLabEngine(_Engine):
         return model_out
 
     @torch.no_grad()
-    def postprocess(self, sem, ctr_hmp, offsets):
+    def postprocess(self, sem, ctr_hmp, offsets, is_target):
         pan_seg, _ = get_panoptic_segmentation(
             sem, ctr_hmp, offsets, self.thing_list,
             self.label_divisor, self.stuff_area,
             self.thing_area,
-            self.void_label, self.nms_threshold, self.nms_kernel
+            self.void_label, self.nms_threshold, self.nms_kernel, is_target = is_target
         )
         return pan_seg
 
