@@ -8,40 +8,22 @@ import argparse
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
-from empanada.models.panoptic_deeplab import PanopticDeepLabPR
+from empanada import models
 from empanada.inference.engines import PanopticDeepLabEngine
 from empanada.data.single_class_instance_dataset import SingleClassInstanceDataset
 from empanada.data.utils.transforms import FactorPad
 import empanada.metrics as metrics
 
-from train import ProgressMeter, ProgressAverageMeter
+from train import ProgressMeter, ProgressAverageMeter, sliding_window_infer
 
 cem_norms = {'mean': 0.574, 'std': 0.176}
 
 
-def load_model(model_path, device, fallback_norms = cem_norms):
+def load_model(model_path, config, device, fallback_norms=cem_norms):
+    weights = torch.load(model_path, map_location=device)
 
-    weights = torch.load(model_path, map_location = device)
-
-    model = PanopticDeepLabPR(
-            encoder="resnet50",
-            num_classes=1,
-            stage4_stride=16,
-            decoder_channels=256,
-            low_level_channels_project=[32],
-            atrous_rates=[2, 4, 6],
-            aspp_channels=256,
-            aspp_dropout=0.5,
-            ins_decoder=True,
-            ins_ratio=0.5,
-            low_level_stages=[1],
-            num_fc=3,
-            train_num_points=1024,
-            oversample_ratio=3,
-            importance_sample_ratio=0.75,
-            subdivision_steps=2,
-            subdivision_num_points=8192
-    )
+    arch = config['MODELS_ARCHITECTURE']['arch']
+    model = models.__dict__[arch](**config['MODELS_ARCHITECTURE'])
 
     state_dict = weights.get('state_dict', weights)
     norms = weights.get('norms', fallback_norms)
@@ -52,8 +34,8 @@ def load_model(model_path, device, fallback_norms = cem_norms):
 
     return model, norms
 
-def get_eval_loader(norms, config):
 
+def get_eval_loader(norms, config):
     eval_tfs = A.Compose([
         FactorPad(128),
         A.Normalize(**norms),
@@ -66,7 +48,8 @@ def get_eval_loader(norms, config):
                                  num_workers=4)
     return eval_loader
 
-def validate(model, eval_loader, config, device):
+
+def validate(model, eval_loader, config, device, model_name):
     class_names = {1: 'mitochondrion'}
 
     metric_dict = {}
@@ -80,23 +63,37 @@ def validate(model, eval_loader, config, device):
     engine = PanopticDeepLabEngine(model, **config['EVAL']['engine_params'])
 
     batch_time = ProgressAverageMeter('Time', ':6.3f')
-    progress = ProgressMeter(
-        len(eval_loader),
-        [batch_time],
-        prefix='Evaluating: '
-    )
+
+    n_batches = len(eval_loader)
+    progress = ProgressMeter(n_batches, [batch_time], prefix=f'Evaluating:  {model_name} ')
+
+    loader_iter = eval_loader 
+
+
 
     with torch.no_grad():
-        for i, batch in enumerate(eval_loader):
+        for i, batch in enumerate(loader_iter):
             end = time.time()
             images = batch['image'].to(device, non_blocking=True)
             target = {k: v.to(device, non_blocking=True) for k, v in batch.items() if k not in ['image', 'fname']}
 
-            output = engine.infer(images)
+           
+            if config['EVAL']['patch_based'] and model_name != 'MitoNet':
+                patch_size = config['MODELS_ARCHITECTURE']['decoder_channels']
+                overlap = config['EVAL']['sliding_window_inference_overlap']
+                output = sliding_window_infer(
+                    images, engine,
+                    patch_size=patch_size,
+                    overlap=overlap,
+                    batch_chunk=config['EVAL'].get('patch_chunk_size', 16),
+                )
+            else:
+                output = engine.infer(images)
+
             semantic = engine._harden_seg(output['sem'])
 
             output['pan_seg'] = engine.postprocess(
-                semantic, output['ctr_hmp'], output['offsets'], is_target = False
+                semantic, output['ctr_hmp'], output['offsets'], is_target= False
             )
             target['pan_seg'] = engine.postprocess(
                 target['sem'].unsqueeze(1), target['ctr_hmp'], target['offsets'], is_target = True
@@ -119,29 +116,32 @@ def validate(model, eval_loader, config, device):
             for label, score in avg_scores.items():
                 class_label = class_names[label]
                 results[f"{class_label}_{metric_name}"] = float(score)
-    
+
     return results
 
-def run_benchmark(config):
+
+def run_benchmark(config, patch_mode="sliding"):
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     summary_results = []
-
+    
     # evaluate original model 
-    Mitonet = torch.load(config["ORIGINAL_MODEL"], map_location = device)
-    Mitonet.to(device)
-    Mitonet.eval() 
+    if config["ORIGINAL_MODEL"]:
+        Mitonet = torch.load(config["ORIGINAL_MODEL"], map_location = device)
+        Mitonet.to(device)
+        Mitonet.eval() 
 
-    Mitonet_norms = {'mean': 0.57571, 'std': 0.12765}
+        Mitonet_norms = {'mean': 0.57571, 'std': 0.12765}
 
-    eval_loader = get_eval_loader(Mitonet_norms, config)
+        eval_loader = get_eval_loader(Mitonet_norms, config)
 
 
-    scores = validate(Mitonet, eval_loader, config, device)
+        scores = validate(Mitonet, eval_loader, config, device, model_name="MitoNet")
 
-    scores['model'] = 'MitoNet'
-    summary_results.append(scores)
+        scores['model'] = 'MitoNet'
+        summary_results.append(scores)
 
+    
     for model_path in config['MODELS']:
         model_name = os.path.basename(model_path)
 
@@ -150,37 +150,36 @@ def run_benchmark(config):
             continue
 
         try:
-            model, norms = load_model(model_path, device, fallback_norms=cem_norms)
+            model, norms = load_model(model_path, config, device, fallback_norms=cem_norms)
             eval_loader = get_eval_loader(norms, config)
 
-            scores = validate(model, eval_loader, config, device)
+            scores = validate(
+                model, eval_loader, config, device, model_name
+            )
 
             scores['model'] = model_name
             summary_results.append(scores)
 
         except Exception as e:
-            print(f"error evaluating {model_name}")
+            print(f"error evaluating {model_name} with the following message {e}")
 
-    
-    spaces = 47  
+    spaces = 47
     header = f"{'Model Checkpoint':<45} |"
     for metric in config['EVAL']['metrics']:
         header += f" {metric['name']:<12} |"
-        spaces += 15  
-    
+        spaces += 15
+
     print("\n" + "=" * spaces)
     print(header)
     print("=" * spaces)
-    
+
     for res in summary_results:
-        output = f"{res['model'].replace('-120_checkpoint.pth.tar', ''):<45} |"
+        output = f"{res['model'].replace('_checkpoint.pth.tar', 'ep'):<45} |"
         for metric, result in res.items():
             if metric != 'model':
-                output += f" {result:<12.4f} |"
+                output += f" {result:<12.3f} |"
         print(output)
     print("=" * spaces)
-    
-
 
 
 def parse_args():
