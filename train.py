@@ -21,6 +21,7 @@ import torch.backends.cudnn as cudnn
 import torch.multiprocessing as mp
 from torch.utils.data import DataLoader, WeightedRandomSampler
 from torch.cuda.amp import autocast, GradScaler
+import torch.nn.functional as F
 
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
@@ -52,11 +53,10 @@ def main_worker(config):
         reinit=True
     )
 
-    # model used in the paper is PanopticDeepLab
     arch = config['MODEL']['arch']
     model = models.__dict__[arch](**config['MODEL'])
 
-    # load pretrained weights and convert them 
+    # load pretrained weights and convert them
     pretraining_path = config['TRAIN']['encoder_pretraining_path']
     pretraining_norms = config['TRAIN']['pretraining_norms']
 
@@ -75,11 +75,11 @@ def main_worker(config):
         if state.get('norms') is not None:
           norms['mean'] = state['norms'][0]
           norms['std'] = state['norms'][1]
-        else:  
+        else:
             norms = pretraining_norms
 
-    # layer freezing for ConvNeXt, swin and swinv2 not supported      
-    finetune_layer = (config['TRAIN']['finetune_layer'] if pretraining else 'all') 
+    # layer freezing for ConvNeXt, swin and swinv2 not supported
+    finetune_layer = (config['TRAIN']['finetune_layer'] if pretraining else 'all')
 
     for pname, param in model.named_parameters():
         if 'encoder' in pname:
@@ -120,26 +120,28 @@ def main_worker(config):
         ToTensorV2()
     ])
 
-    train_dataset = SingleClassInstanceDataset(data_dir=config['TRAIN']['train_dir'], transforms = tfs)
+    train_dataset = SingleClassInstanceDataset(data_dir=config['TRAIN']['train_dir'], transforms = tfs, threshold= config['TRAIN']['minimum_instance_size'])
     train_sampler = WeightedRandomSampler(train_dataset.weights, len(train_dataset))
 
     train_loader = DataLoader(
-        train_dataset, 
-        batch_size=config['TRAIN']['batch_size'], 
+        train_dataset,
+        batch_size=config['TRAIN']['batch_size'],
         shuffle=False,
-        num_workers=config['TRAIN']['workers'], 
-        pin_memory=torch.cuda.is_available(), 
+        num_workers=config['TRAIN']['workers'],
+        pin_memory=torch.cuda.is_available(),
         sampler=train_sampler,
         drop_last=True
     )
 
     if config['EVAL']['eval_dir'] is not None:
 
+        
         eval_tfs = A.Compose([
             FactorPad(128),
             A.Normalize(**norms),
             ToTensorV2()
         ])
+
         eval_dataset = SingleClassInstanceDataset(data_dir=config['EVAL']['eval_dir'], transforms=eval_tfs)
         eval_loader = DataLoader(eval_dataset, batch_size=1, shuffle=False,
                                  pin_memory=torch.cuda.is_available(),
@@ -147,7 +149,7 @@ def main_worker(config):
     else:
         eval_loader = None
 
-    # Loss as specified in the paper
+
     criterion = PanopticLoss(**config['TRAIN']['loss_params'])
 
     optimizer = configure_optimizer(model, weight_decay=config['TRAIN']['weight_decay'])
@@ -301,7 +303,7 @@ def validate(
         criterion,
         epoch,
         config,
-        step
+        step,
 ):
     class_names = ['background', 'mitochondrion']
 
@@ -316,18 +318,12 @@ def validate(
     batch_time = ProgressAverageMeter('Time', ':6.3f')
     loss_meters = None
 
-    progress = ProgressMeter(
-        len(eval_loader),
-        [batch_time],
-        prefix='Validation: '
-    )
+    progress = ProgressMeter(len(eval_loader), [batch_time], prefix='Validation: ')
 
     engine = PanopticDeepLabEngine(model, **config['EVAL']['engine_params'])
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-
-
-    for i, batch in enumerate(eval_loader):
+    for batch_idx, batch in enumerate(eval_loader):
         end = time.time()
         images = batch['image']
         target = {k: v for k, v in batch.items() if k not in ['image', 'fname']}
@@ -335,24 +331,36 @@ def validate(
         images = images.to(device, non_blocking=True)
         target = {k: tensor.to(device, non_blocking=True) for k, tensor in target.items()}
 
-        output = engine.infer(images)
-        semantic = engine._harden_seg(output['sem'])
-        output['pan_seg'] = engine.postprocess(
-            semantic, output['ctr_hmp'], output['offsets']
-        )
-        target['pan_seg'] = engine.postprocess(
-            target['sem'].unsqueeze(1), target['ctr_hmp'], target['offsets']
-        )
+        if config['EVAL']['patch_based']:
+            patch_size = config['MODEL']['decoder_channels']
+            overlap = config['EVAL']['sliding_window_inference_overlap']
+            output = sliding_window_infer(
+                images, engine,
+                patch_size=patch_size,
+                overlap=overlap,
+                batch_chunk= 16
+            )
+        else:
+            output = engine.infer(images)
 
+        semantic = engine._harden_seg(output['sem'])
+
+        # is_target passed for compatibility with instance fitlering during inference, does nothing unless thing_area over 0 specified in config
+        output['pan_seg'] = engine.postprocess(semantic, output['ctr_hmp'], output['offsets'], is_target=False)
+        target['pan_seg'] = engine.postprocess(
+            target['sem'].unsqueeze(1), target['ctr_hmp'], target['offsets'], is_target=True
+        )
         loss, aux_loss = criterion(output, target)
 
         if loss_meters is None:
-            loss_meters = {}
+            loss_meters = {'total_loss': ProgressAverageMeter('total_loss', ':.4e')}
+            loss_meters['total_loss'].update(loss.item())
             for k, v in aux_loss.items():
                 loss_meters[k] = ProgressAverageMeter(k, ':.4e')
                 loss_meters[k].update(v)
                 progress.meters.append(loss_meters[k])
         else:
+            loss_meters['total_loss'].update(loss.item())
             for k, v in aux_loss.items():
                 loss_meters[k].update(v)
 
@@ -361,22 +369,18 @@ def validate(
 
         batch_time.update(time.time() - end)
 
-        if i % config['TRAIN']['print_freq'] == 0:
-            progress.display(i)
+        if batch_idx % config['TRAIN']['print_freq'] == 0:
+            progress.display(batch_idx)
 
     print('\n')
     print(f'Validation results:')
     meters.display()
 
     wandb_val_dict = {"epoch": epoch}
-
-    if loss_meters is not None:
-        wandb_val_dict.update({
-            f"val/loss_{k}": meter.avg
-            for k, meter in loss_meters.items() if k != 'total_loss'
-        })
-
-        wandb_val_dict["val/total_loss"] = loss_meters['total_loss'].avg
+    wandb_val_dict.update({
+        f"val/loss_{k}": meter.avg for k, meter in loss_meters.items() if k != 'total_loss'
+    })
+    wandb_val_dict["val/total_loss"] = loss_meters['total_loss'].avg
 
     if hasattr(meters, 'meters'):
         for name, meter in meters.meters.items():
@@ -384,8 +388,6 @@ def validate(
                 wandb_val_dict[f"val_metrics/{name}"] = meter.avg
 
     wandb.log(wandb_val_dict, step=step)
-
-
 
 def configure_optimizer(model, weight_decay=0.1, **kwargs):
     decay = set()
@@ -422,15 +424,15 @@ def configure_optimizer(model, weight_decay=0.1, **kwargs):
 
 def load_encoder_weights(pretraining_path: str, encoder: str) -> dict:
     '''Loads encoder weights depending on the encoder type'''
-    
+
     state = torch.load(pretraining_path, weights_only = False)
     state_dict = state.get('state_dict', state)
 
     if 'resnet' in encoder:
-        
+
         for k in list(state_dict.keys()):
             clean_k = k.replace('module.','')
-    
+
             if clean_k.startswith('fc'):
                 del state_dict[k]
                 continue
@@ -445,17 +447,17 @@ def load_encoder_weights(pretraining_path: str, encoder: str) -> dict:
 
         for k in list(state_dict.keys()):
             clean_k = k.replace('module.','')
-    
+
             if clean_k.startswith('fc'):
                 del state_dict[k]
                 continue
-    
+
             if clean_k == 'downsample_layers.0.0.weight':
                 state_dict[k] = state_dict[k].mean(dim=1, keepdim=True)
-                
+
             state_dict['encoder.' + 'model.' + clean_k] = state_dict[k]
             del state_dict[k]
-    
+
     elif 'swin' in encoder:
         state_dict = state_dict["model"]
         for k in list(state_dict.keys()):
@@ -468,6 +470,8 @@ def load_encoder_weights(pretraining_path: str, encoder: str) -> dict:
 
     return state, state_dict
 
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="YAML config")
     parser.add_argument(
@@ -478,6 +482,70 @@ def parse_args():
         help="path to yaml config file"
     )
     return parser.parse_args()
+
+
+def sliding_window_infer(images, engine, patch_size=256, overlap=64, batch_chunk=16, sigma = 0.22):
+    b, c, h, w = images.shape
+    assert b == 1, "sliding_window_infer expects batch size 1 for eval"
+
+    stride = patch_size - overlap
+
+    pad_h = (stride - (h - patch_size) % stride) % stride if h > patch_size else patch_size - h
+    pad_w = (stride - (w - patch_size) % stride) % stride if w > patch_size else patch_size - w
+    images_p = F.pad(images, (0, pad_w, 0, pad_h), mode='replicate')
+    _, _, ph, pw = images_p.shape
+
+    ys = list(range(0, ph - patch_size + 1, stride))
+    xs = list(range(0, pw - patch_size + 1, stride))
+    if ys[-1] != ph - patch_size:
+        ys.append(ph - patch_size)
+    if xs[-1] != pw - patch_size:
+        xs.append(pw - patch_size)
+
+    out_accum = None
+    weight = torch.zeros(1, 1, ph, pw, device=images.device)
+
+    window = get_2d_gaussian_window((patch_size,patch_size), sigma)
+    window = window.to(images.device)
+
+    tiles, coords = [], []
+    for y in ys:
+        for x in xs:
+            tiles.append(images_p[:, :, y:y+patch_size, x:x+patch_size])
+            coords.append((y, x))
+
+    for s in range(0, len(tiles), batch_chunk):
+        batch_tiles = torch.cat(tiles[s:s+batch_chunk], dim=0)
+        out = engine.infer(batch_tiles)
+
+        if out_accum is None:
+            out_accum = {
+                k: torch.zeros(1, v.shape[1], ph, pw, device=images.device)
+                for k, v in out.items()
+            }
+
+        for j, (y, x) in enumerate(coords[s:s+batch_chunk]):
+            for k, v in out.items():
+                out_accum[k][:, :, y:y+patch_size, x:x+patch_size] += v[j:j+1] * window
+            weight[:, :, y:y+patch_size, x:x+patch_size] += window
+
+    for k in out_accum:
+        # clamping to prevent divison by 0
+        out_accum[k] = out_accum[k] / weight.clamp(min=1e-5)
+        out_accum[k] = out_accum[k][:, :, :h, :w]
+
+    return out_accum
+
+def get_2d_gaussian_window(patch_size, sigma=0.33):
+    y = torch.linspace(-1, 1, patch_size[0])
+    x = torch.linspace(-1, 1, patch_size[1])
+    y_grid, x_grid = torch.meshgrid(y, x, indexing='ij')
+    
+    # Gaussian formula: e^(-(x^2 + y^2) / 2*sigma^2)
+    window = torch.exp(-(x_grid**2 + y_grid**2) / (2 * sigma**2))
+    
+    # Add channel and batch dims if necessary to broadcast with your output
+    return window.unsqueeze(0).unsqueeze(0)
 
 
 class ProgressAverageMeter(metrics.AverageMeter):
