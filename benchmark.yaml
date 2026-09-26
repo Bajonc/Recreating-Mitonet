@@ -2,9 +2,11 @@ MODELS:
   - "YOUR_MODEL_PATH1"
   - "YOUR_MODEL_PATH2"
 # etc.
+
+# if left empty, dont evaluate
 ORIGINAL_MODEL: "ORIGINAL_MODEL_PATH"
 
-# The architecture of the models that are being benchmarked, currently mixed model benchmarking is not supported
+# The architecture of the models that are being benchmarked, mixed model benchmarking is not supported
 MODELS_ARCHITECTURE:
   arch: "PanopticDeepLabPR"
   encoder: "resnet50"
@@ -21,6 +23,7 @@ MODELS_ARCHITECTURE:
 
 EVAL:
   eval_dir: "YOUR_EVAL_DIR"
+  global: False
   batch_size: 1
   workers: 4
   print_freq: 50
@@ -32,8 +35,8 @@ EVAL:
     - { metric: "AP", name: "AP@50", labels: [1], label_divisor: 1000, iou_thr: 0.50, output_key: "pan_seg", target_key: "pan_seg" }
     - { metric: "AP", name: "AP@75", labels: [1], label_divisor: 1000, iou_thr: 0.75, output_key: "pan_seg", target_key: "pan_seg" }
     - { metric: "PQ", name: "PQ", labels: [1], label_divisor: 1000, iou_thr: 0.75, output_key: "pan_seg", target_key: "pan_seg" }
-#    - { metric: "MSA", name: "MSA", labels: [1], label_divisor: 1000, output_key: "pan_seg", target_key: "pan_seg"}
-    
+    - { metric: "MSA", name: "MSA", labels: [1], label_divisor: 1000, output_key: "pan_seg", target_key: "pan_seg" }
+
   engine_params:
     thing_list: [ 1 ]
     label_divisor: 1000
@@ -44,3 +47,6 @@ EVAL:
     nms_threshold: 0.1
     nms_kernel: 7
     confidence_thr: 0.5
+
+  patch_based: True
+  sliding_window_inference_overlap: 192
