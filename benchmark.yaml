@@ -23,6 +23,7 @@ MODELS_ARCHITECTURE:
 
 EVAL:
   eval_dir: "YOUR_EVAL_DIR"
+  # if False metrics are calculated per image and then averaged
   global: False
   batch_size: 1
   workers: 4
