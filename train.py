@@ -457,7 +457,6 @@ def load_encoder_weights(pretraining_path: str, encoder: str) -> dict:
 
             if clean_k == 'downsample_layers.3.1.weight' and config["MODEL"]["stage4_stride"] == 16:
                 state_dict[k] = state_dict[k].mean(dim=(2,3), keepdim=True)
-            
 
             state_dict['encoder.' + 'model.' + clean_k] = state_dict[k]
             del state_dict[k]
