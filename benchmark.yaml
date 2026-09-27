@@ -48,5 +48,5 @@ EVAL:
     nms_kernel: 7
     confidence_thr: 0.5
 
-  patch_based: True
+  patch_based: False
   sliding_window_inference_overlap: 192
