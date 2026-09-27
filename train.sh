@@ -12,6 +12,6 @@
 #SBATCH --error=YOUR_OUTPUT_DIR/%j.err
 
 eval "$(conda shell.bash hook)"
-conda activate empanada
+conda activate YOUR_ENV
 
 srun --label python train.py -c train_config.yaml
