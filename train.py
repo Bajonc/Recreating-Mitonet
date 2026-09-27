@@ -542,10 +542,8 @@ def get_2d_gaussian_window(patch_size, sigma=0.33):
     x = torch.linspace(-1, 1, patch_size[1])
     y_grid, x_grid = torch.meshgrid(y, x, indexing='ij')
     
-    # Gaussian formula: e^(-(x^2 + y^2) / 2*sigma^2)
     window = torch.exp(-(x_grid**2 + y_grid**2) / (2 * sigma**2))
     
-    # Add channel and batch dims if necessary to broadcast with your output
     return window.unsqueeze(0).unsqueeze(0)
 
 
