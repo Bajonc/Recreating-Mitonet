@@ -3,7 +3,7 @@ MODELS:
   - "YOUR_MODEL_PATH2"
 # etc.
 
-# if left empty, dont evaluate
+# if left empty, dont evaluate original downloaded MitoNet model
 ORIGINAL_MODEL: "ORIGINAL_MODEL_PATH"
 
 # The architecture of the models that are being benchmarked, mixed model benchmarking is not supported
