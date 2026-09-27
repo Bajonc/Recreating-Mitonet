@@ -343,7 +343,7 @@ def validate(
 
         semantic = engine._harden_seg(output['sem'])
 
-        # is_target passed for compatibility with instance fitlering during inference, does nothing unless thing_area over 0 specified in config
+        # is_target passed for compatibility with instance filtering during inference, does nothing unless thing_area over 0 specified in config
         output['pan_seg'] = engine.postprocess(semantic, output['ctr_hmp'], output['offsets'], is_target=False)
         target['pan_seg'] = engine.postprocess(
             target['sem'].unsqueeze(1), target['ctr_hmp'], target['offsets'], is_target=True
