@@ -14,6 +14,4 @@
 eval "$(conda shell.bash hook)"
 conda activate YOUR_ENV
 
-cd YOUR_WORKING_DIR
-
 torchrun --standalone --nproc_per_node=YOUR_GPU_COUNT multigpu_train.py -c train_config.yaml
