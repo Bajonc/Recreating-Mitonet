@@ -49,4 +49,5 @@ EVAL:
     confidence_thr: 0.5
 
   patch_based: False
+  # sliding window inference only when patch based
   sliding_window_inference_overlap: 192
