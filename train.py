@@ -134,8 +134,6 @@ def main_worker(config):
     )
 
     if config['EVAL']['eval_dir'] is not None:
-
-        
         eval_tfs = A.Compose([
             FactorPad(128),
             A.Normalize(**norms),
