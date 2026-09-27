@@ -66,7 +66,7 @@ def main_worker(config):
 
     else:
         pretraining = True
-        state, state_dict = load_encoder_weights(pretraining_path, config['MODEL']['encoder'])
+        state, state_dict = load_encoder_weights(pretraining_path, config=config)
 
         msg = model.load_state_dict(state_dict, strict=False)
         print("=> loaded backbone from checkpoint '{}' with msg {}".format(pretraining_path , msg))
@@ -420,9 +420,11 @@ def configure_optimizer(model, weight_decay=0.1, **kwargs):
 
     return optim.AdamW(param_groups, **kwargs)
 
-def load_encoder_weights(pretraining_path: str, encoder: str) -> dict:
+def load_encoder_weights(pretraining_path: str, config: dict) -> dict:
     '''Loads encoder weights depending on the encoder type'''
 
+    encoder = config['MODEL']['encoder']
+    
     state = torch.load(pretraining_path, weights_only = False)
     state_dict = state.get('state_dict', state)
 
@@ -454,7 +456,7 @@ def load_encoder_weights(pretraining_path: str, encoder: str) -> dict:
                 state_dict[k] = state_dict[k].mean(dim=1, keepdim=True)
 
             if clean_k == 'downsample_layers.3.1.weight' and config["MODEL"]["stage4_stride"] == 16:
-                state_dict[k] = state_dict[k].mean(dim=(2,3), keepdim=True)
+                state_dict[k] = state_dict[k].mean(dim=(2,3), keepdim=True)
 
             state_dict['encoder.' + 'model.' + clean_k] = state_dict[k]
             del state_dict[k]
