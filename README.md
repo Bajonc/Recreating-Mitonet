@@ -44,11 +44,12 @@ Different encoders:
 - Pretraining on different encoders than ResNet50 is not supported
 
 
-## Models
+### Selected Models
 
 Results were benchmarked with global set to True and thing_area set to 150 in benchmark.yaml
-
 | encoder | pretrain | semantic_iou | f1@50 | f1@75 | AP@50 | AP@75 | PQ | MSA | #params | model |
 | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| resnet50 | CEM1.5M | 0.771 | 0.757 | 0.669 | 0.609 | 0.502 | 0.662 | 0.455 | 25M | [HuggingFace](https://huggingface.co/Bajonc/resnet50_cem1.5M_recreated/resolve/main/resnet50_cem1.5M_recreated_pretraining.pth.tar) |
-| resnet50 | ImageNet | | | | | | | | 25M | [HuggingFace](https://huggingface.co/Bajonc/resnet50_imagenet_pretraining/resolve/main/resnet50_ImageNet_pretrain.pth.tar) |
+| resnet50 | CEM1.5M | 0.771 | 0.757 | 0.669 | 0.609 | 0.502 | 0.662 | 0.455 | 25M | [HuggingFace](https://huggingface.co/Bajonc/resnet50_cem1.5M_recreated/tree/main) |
+| resnet50 | ImageNet | 0.764 | 0.768 | 0.677 | 0.624 | 0.511 | 0.671 | 0.464 | 25M | [HuggingFace](https://huggingface.co/Bajonc/resnet50_imagenet_pretraining/tree/main)|
+| ConvNeXt Large | LVD-1689M (DINOv3) | 0.800 | 0.839 | 0.676 | 0.722 | 0.510 | 0.694 | 0.465 | 198M | [HuggingFace](https://huggingface.co/Bajonc/convnext-large/tree/main)|
+| SwinV2-S | ImageNet-1k | 0.820 | 0.765 | 0.668 | 0.619 | 0.502 | 0.665 | 0.455 | 50M | [HuggingFace](https://huggingface.co/Bajonc/swinv2-s/tree/main)|
