@@ -40,7 +40,7 @@ Different encoders:
 | Swin | swin_t, swin_s, swin_b, swin_l |
 | SwinV2 | swinv2_t, swinv2_s, swinv2_b, swinv2_l |
 | ConvNeXt | convnext_tiny, convnext_small, convnext_base, convnext_large |
-- All encoders use the PanopticDeepLab architecture, changing the decoder_channels, aspp_channels and crop sizes in the training transformations may be necessary when training with Swin encoders. 
+- All encoders use the PanopticDeepLab architecture, changing the decoder_channels and aspp_channels parameters as well as crop sizes in the training transformations may be necessary when training with Swin encoders. 
 - Pretraining on different encoders than ResNet50 is not supported
 
 
